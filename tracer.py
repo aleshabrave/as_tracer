@@ -21,7 +21,7 @@ def get_more_info(ip_address: str) -> Tuple[str, str]:
     try:
         response = requests.get(f"https://ipinfo.io/{ip_address}/json")
         response_json = json.loads(response.content)
-        return response_json['country'], response_json['org']
+        return response_json["country"], response_json["org"]
     except Exception as e:
         return "undefined", "undefined"
 
@@ -30,12 +30,12 @@ def get_route_to(ip_address: str, max_ttl: int, timeout: int) -> Iterator[RouteN
     try:
         for ttl in range(1, max_ttl + 1):
             receiver = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)
-            receiver.bind(('', TRACEROUTE_PORT))
+            receiver.bind(("", TRACEROUTE_PORT))
             receiver.settimeout(timeout)
 
             sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
             sender.setsockopt(SOL_IP, IP_TTL, ttl)
-            sender.sendto(b'_', (ip_address, TRACEROUTE_PORT))
+            sender.sendto(b"_", (ip_address, TRACEROUTE_PORT))
 
             try:
                 _, response = receiver.recvfrom(2**16 - 1)
@@ -44,7 +44,7 @@ def get_route_to(ip_address: str, max_ttl: int, timeout: int) -> Iterator[RouteN
                     id=ttl,
                     ip_address=response[0],
                     as_name=as_info[1],
-                    country=as_info[0]
+                    country=as_info[0],
                 )
                 if response[0] == ip_address:
                     break
@@ -79,9 +79,7 @@ def get_ip_address(address: str) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "destination", type=str, help="Set hostname or ip-address"
-    )
+    parser.add_argument("destination", type=str, help="Set hostname or ip-address")
 
     args = parser.parse_args()
     ip_address = get_ip_address(args.destination)

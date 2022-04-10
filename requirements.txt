@@ -1,0 +1,12 @@
+pip~=20.0.2
+toml~=0.10.2
+wheel~=0.34.2
+cryptography~=2.8
+Pillow~=7.0.0
+keyring~=23.5.0
+pkginfo~=1.8.2
+pydantic~=1.9.0
+setuptools~=45.2.0
+packaging~=20.9
+zipp~=3.7.0
+requests~=2.22.0
