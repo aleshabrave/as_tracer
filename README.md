@@ -7,7 +7,6 @@ Traceroute на минималках.
 python3 tracer.py google.com
 ```
 
-### Пример запуска:
 ![img.png](img.png)
 
 
