@@ -1,87 +1,104 @@
 import argparse
 import json
 import socket
-from socket import *
+from collections import namedtuple
+from dataclasses import dataclass
 from typing import Iterator, Tuple
 
 import requests
-from pydantic import BaseModel
+from prettytable import PrettyTable
 
-TRACEROUTE_PORT = 33434
-
-
-class RouteNode(BaseModel):
-    id: int = "undefined"
-    ip_address: str = "undefined"
-    as_name: str = "undefined"
-    country: str = "undefined"
+Settings = namedtuple("Settings", ["port", "timeout", "nodes", "ip"])
 
 
-def get_more_info(ip_address: str) -> Tuple[str, str]:
+@dataclass
+class RouteNode:
+    id: int = "-"
+    ip: str = "-"
+    as_name: str = "-"
+    country: str = "-"
+
+
+def get_more_info(ip: str) -> Tuple[str, str]:
     try:
-        response = requests.get(f"https://ipinfo.io/{ip_address}/json")
+        response = requests.get(f"https://ipinfo.io/{ip}/json")
         response_json = json.loads(response.content)
-        return response_json["country"], response_json["org"]
-    except Exception as e:
-        return "undefined", "undefined"
+        return response_json["org"], response_json["country"]
+    except Exception:
+        return "-", "-"
 
 
-def get_route_to(ip_address: str, max_ttl: int, timeout: int) -> Iterator[RouteNode]:
-    try:
-        for ttl in range(1, max_ttl + 1):
-            receiver = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)
-            receiver.bind(("", TRACEROUTE_PORT))
-            receiver.settimeout(timeout)
+def get_route(settings: Settings) -> Iterator[RouteNode]:
+    for node_id in range(settings.nodes):
+        ttl = node_id + 1
 
-            sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-            sender.setsockopt(SOL_IP, IP_TTL, ttl)
-            sender.sendto(b"_", (ip_address, TRACEROUTE_PORT))
+        with socket.socket(
+            socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP
+        ) as receiver:
+            receiver.bind(("", settings.port))
+            receiver.settimeout(settings.timeout)
+
+            with socket.socket(
+                socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP
+            ) as sender:
+                sender.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
+                sender.sendto(b"_", (settings.ip, settings.port))
 
             try:
-                _, response = receiver.recvfrom(2**16 - 1)
-                as_info = get_more_info(response[0])
-                yield RouteNode(
-                    id=ttl,
-                    ip_address=response[0],
-                    as_name=as_info[1],
-                    country=as_info[0],
-                )
-                if response[0] == ip_address:
-                    break
-            except error:
-                yield RouteNode(id=ttl)
-            finally:
-                receiver.close()
-                sender.close()
-    except Exception as e:
-        print(e)
-        exit()
+                _, address = receiver.recvfrom(2**16 - 1)
+                as_name, country = get_more_info(address[0])
+                yield RouteNode(id=ttl, ip=address[0], as_name=as_name, country=country)
+            except socket.error:
+                yield RouteNode(id=node_id)
 
 
 def print_route(route: Iterator[RouteNode]) -> None:
-    from prettytable import PrettyTable
-
-    print("Route table:")
+    print("Building a routing table...")
     table = PrettyTable(["Номер", "IP", "AS", "Страна"])
-    for node in route:
-        table.add_row([node.id, node.ip_address, node.as_name, node.country])
 
+    for node in route:
+        table.add_row([node.id, node.ip, node.as_name, node.country])
+    print("Routing table:")
     print(table)
 
 
-def get_ip_address(address: str) -> str:
+def get_ip(hostname: str) -> str:
     try:
-        return gethostbyname(address)
-    except error:
-        print(f"Can't get ip address for {address}")
-        exit()
+        return socket.gethostbyname(hostname)
+    except socket.error as e:
+        print(f"Can't get ip address for {hostname}, message:\n {e}")
+        exit(1)
+
+
+def get_settings() -> Settings:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-p",
+        dest="port",
+        default=33434,
+        type=int,
+        help="Port for listing traceroute socket.",
+    )
+    parser.add_argument(
+        "-t",
+        dest="timeout",
+        default=3,
+        type=int,
+        help="Timeout for receiving datagrams from route nodes.",
+    )
+    parser.add_argument(
+        "-n", dest="nodes", default=30, type=int, help="Maximum nodes in route."
+    )
+    parser.add_argument("hostname", type=str, help="Hostname or ip-address.")
+
+    args = parser.parse_args()
+
+    ip_address = get_ip(args.hostname)
+
+    return Settings(args.port, args.timeout, args.nodes, ip_address)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("destination", type=str, help="Set hostname or ip-address")
-
-    args = parser.parse_args()
-    ip_address = get_ip_address(args.destination)
-    route = get_route_to(ip_address, 30, 3)
-    print_route(route)
+    route_settings = get_settings()
+    route_iter = get_route(route_settings)
+    print_route(route_iter)

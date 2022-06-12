@@ -21,8 +21,3 @@ python3 tracer.py --help
 ```
 python3 -m pip install -r requirements.txt
 ```
-
-по дефолту должно хватить -
-```
-pip3 install pydantic
-```
